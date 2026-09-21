@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F2A3D">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bataille Navale">
 <title>Bataille Navale</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -324,6 +332,12 @@
     <span class="pill" id="phasePill">Réglages</span>
   </div>
 
+  <div class="card" id="audioBar" hidden style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px;">
+    <span class="board-label" id="micStatus">Micro…</span>
+    <button class="btn-ghost" id="micToggleBtn" hidden onclick="toggleMic()" style="min-width:auto; padding:8px 14px;">🔊</button>
+  </div>
+  <audio id="remoteAudio" autoplay playsinline hidden></audio>
+
   <!-- ÉCRAN ACCUEIL -->
   <section class="screen" id="screen-home">
     <div class="card">
@@ -338,7 +352,7 @@
       <div class="option-row" id="themeOptions"></div>
     </div>
     <button class="btn-primary" style="width:100%;" onclick="startGame()">Nouvelle partie</button>
-    <button class="btn-ghost" style="width:100%;" onclick="startRemoteTest()">Tester la connexion à distance (bêta)</button>
+    <button class="btn-ghost" style="width:100%;" onclick="startRemoteTest()">Jouer à distance (bêta)</button>
   </section>
 
   <!-- ÉCRAN PLACEMENT -->
@@ -369,7 +383,7 @@
       <span class="big-icon" id="passIcon">📱</span>
       <h2 id="passTitle">Passe le téléphone</h2>
       <p class="lede" id="passText"></p>
-      <button class="btn-primary" onclick="confirmPass()">C'est bon, j'ai le téléphone</button>
+      <button class="btn-primary" onclick="confirmPass()" id="passBtn">C'est bon, j'ai le téléphone</button>
     </div>
   </section>
 
@@ -394,7 +408,7 @@
     <div class="card pass-screen">
       <span class="big-icon">🏆</span>
       <h2 id="winTitle"></h2>
-      <p class="lede">Toute la flotte adverse a été coulée.</p>
+      <p class="lede" id="winSubtitle">Toute la flotte adverse a été coulée.</p>
       <button class="btn-primary" style="width:100%;" onclick="location.reload()">Rejouer</button>
     </div>
   </section>
@@ -406,13 +420,6 @@
       <div id="remoteLinkBox" hidden style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
         <p class="lede" style="word-break:break-all; font-family:'IBM Plex Mono',monospace;" id="remoteLink"></p>
         <button class="btn-secondary" style="width:100%;" onclick="copyRemoteLink()">Copier le lien</button>
-      </div>
-    </div>
-    <div class="card" id="remoteChatBox" hidden>
-      <div id="remoteLog" style="display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:var(--text-dim);"></div>
-      <div style="display:flex; gap:8px; margin-top:12px;">
-        <input id="remoteInput" type="text" placeholder="Message de test" style="flex:1; border-radius:10px; border:1px solid var(--grid-line); background:var(--panel-alt); color:var(--text); padding:10px 12px; font-family:inherit; font-size:0.9rem;">
-        <button class="btn-primary" onclick="sendRemoteTest()">Envoyer</button>
       </div>
     </div>
     <button class="btn-ghost" style="width:100%;" onclick="backToHomeFromRemote()">Retour à l'accueil</button>
@@ -495,6 +502,12 @@
   let previewCell = null;
   let pendingAction = null;
   let lastShotResult = null;
+  let gameMode = 'hotseat'; // 'hotseat' | 'remote'
+  let remoteTurn = null;    // 'me' | 'opponent' | 'waiting'
+  let iAmReady = false;
+  let opponentReady = false;
+  let isHost = false;
+  let pendingRemoteModalAction = null;
 
   const $ = (id) => document.getElementById(id);
   function show(id) {
@@ -566,6 +579,9 @@
 
   // ---- Démarrage partie ----
   function startGame() {
+    stopLocalMedia();
+    if (peer) { try { peer.destroy(); } catch (e) {} peer = null; conn = null; remotePeerId = null; }
+    gameMode = 'hotseat';
     SIZE = selectedGridSize;
     currentFleet = FLEETS[SIZE];
     players = [makePlayer('Joueur 1'), makePlayer('Joueur 2')];
@@ -732,6 +748,14 @@
   }
 
   function validatePlacement() {
+    if (gameMode === 'remote') {
+      iAmReady = true;
+      sendMsg({ type: 'ready' });
+      $('phasePill').textContent = 'En attente';
+      goToWait('⌛', 'Flotte prête !', "En attente que l'adversaire termine son placement…");
+      maybeStartRemoteGame();
+      return;
+    }
     if (placingIndex === 0) {
       goToPass({
         icon: '📱',
@@ -754,6 +778,15 @@
     $('passTitle').textContent = cfg.title;
     $('passText').textContent = cfg.text;
     pendingAction = cfg.onConfirm;
+    $('passBtn').hidden = false;
+    show('screen-pass');
+  }
+  function goToWait(icon, title, text) {
+    $('passIcon').textContent = icon;
+    $('passTitle').textContent = title;
+    $('passText').textContent = text;
+    pendingAction = null;
+    $('passBtn').hidden = true;
     show('screen-pass');
   }
   function confirmPass() {
@@ -865,6 +898,12 @@
 
   function closeResultModal() {
     $('resultModal').hidden = true;
+    if (gameMode === 'remote') {
+      const action = pendingRemoteModalAction;
+      pendingRemoteModalAction = null;
+      if (action) action();
+      return;
+    }
     const r = lastShotResult;
     if (r.allSunk) {
       $('winTitle').textContent = `${players[currentTurn].name} remporte la bataille !`;
@@ -880,16 +919,20 @@
     });
   }
 
-  // ---- Test de connexion à distance (bêta) — nécessite un hébergement réel, ----
+  // ---- Multijoueur à distance (bêta) — nécessite un hébergement réel, ----
   // ---- ne fonctionne pas dans l'aperçu artefact (réseau externe bloqué). ----
   let peer = null;
   let conn = null;
+  let remotePeerId = null;
+  let localStream = null;
+  let mediaCall = null;
+  let localMicReady = false;
+  let remoteMicReady = false;
+  let micMuted = false;
 
   function startRemoteTest() {
     show('screen-remote');
     $('remoteLinkBox').hidden = true;
-    $('remoteChatBox').hidden = true;
-    $('remoteLog').innerHTML = '';
     $('remoteStatus').textContent = 'Connexion au serveur de mise en relation…';
 
     if (typeof Peer === 'undefined') {
@@ -906,13 +949,21 @@
 
     peer = new Peer();
 
+    peer.on('call', (call) => {
+      mediaCall = call;
+      call.answer(localStream || undefined);
+      attachCallHandlers(call);
+    });
+
     peer.on('open', (id) => {
       clearTimeout(openTimeout);
       if (roomId) {
+        isHost = false;
         $('remoteStatus').textContent = `Connexion à la partie ${roomId}…`;
         conn = peer.connect(roomId);
         setupRemoteConnection();
       } else {
+        isHost = true;
         const link = `${location.origin}${location.pathname}?room=${id}`;
         $('remoteStatus').textContent = "Partage ce lien avec l'autre joueur, puis attends sa connexion :";
         $('remoteLink').textContent = link;
@@ -928,30 +979,214 @@
   }
 
   function setupRemoteConnection() {
+    remotePeerId = conn.peer;
     conn.on('open', () => {
-      $('remoteStatus').textContent = 'Connecté ! Échange de messages de test :';
-      $('remoteChatBox').hidden = false;
-      logRemote('— connexion établie —');
+      if (isHost) {
+        SIZE = selectedGridSize;
+        currentFleet = FLEETS[SIZE];
+        sendMsg({ type: 'config', size: SIZE });
+        startRemotePlacement();
+      } else {
+        $('remoteStatus').textContent = 'Connecté ! En attente de la configuration de la partie…';
+      }
     });
-    conn.on('data', (data) => logRemote('Reçu : ' + data));
-    conn.on('close', () => { $('remoteStatus').textContent = 'Connexion perdue.'; });
+    conn.on('data', (data) => {
+      if (data && typeof data === 'object' && data.type) {
+        handleRemoteMessage(data);
+      }
+    });
+    conn.on('close', () => {
+      stopLocalMedia();
+      if (gameMode === 'remote') {
+        showRemoteModal({
+          icon: '📡',
+          title: 'Connexion perdue',
+          text: 'La partie a été interrompue. Recharge la page pour recommencer.',
+          onClose: () => location.reload(),
+        });
+      } else {
+        $('remoteStatus').textContent = 'Connexion perdue.';
+      }
+    });
   }
 
-  function sendRemoteTest() {
-    const input = $('remoteInput');
-    const text = input.value.trim();
-    if (!text || !conn || !conn.open) return;
-    conn.send(text);
-    logRemote('Envoyé : ' + text);
-    input.value = '';
+  function sendMsg(obj) {
+    if (conn && conn.open) conn.send(obj);
   }
 
-  function logRemote(line) {
-    const log = $('remoteLog');
-    const p = document.createElement('div');
-    p.textContent = line;
-    log.appendChild(p);
-    log.scrollTop = log.scrollHeight;
+  function handleRemoteMessage(msg) {
+    if (msg.type === 'config') {
+      SIZE = msg.size;
+      currentFleet = FLEETS[SIZE];
+      startRemotePlacement();
+    } else if (msg.type === 'ready') {
+      opponentReady = true;
+      maybeStartRemoteGame();
+    } else if (msg.type === 'fire') {
+      handleIncomingFire(msg.row, msg.col);
+    } else if (msg.type === 'result') {
+      handleIncomingResult(msg);
+    } else if (msg.type === 'mic-ready') {
+      remoteMicReady = true;
+      maybeStartCall();
+    }
+  }
+
+  function startRemotePlacement() {
+    gameMode = 'remote';
+    players = [makePlayer('Moi')];
+    placingIndex = 0;
+    iAmReady = false;
+    opponentReady = false;
+    remoteTurn = null;
+    $('audioBar').hidden = false;
+    requestMic();
+    beginPlacement(0);
+  }
+
+  function maybeStartRemoteGame() {
+    if (iAmReady && opponentReady) {
+      remoteTurn = isHost ? 'me' : 'opponent';
+      beginRemoteTurn();
+    }
+  }
+
+  function beginRemoteTurn() {
+    $('phasePill').textContent = 'Combat';
+    renderRemoteFireBoard();
+    renderRemoteFleetStatus();
+    show('screen-play');
+  }
+
+  function renderRemoteFireBoard() {
+    const me = players[0];
+    const board = $('fireBoard');
+    board.innerHTML = '';
+    buildBoardGrid(board);
+    board.appendChild(document.createElement('div')).className = 'cell head';
+    for (let c = 0; c < SIZE; c++) {
+      const h = document.createElement('div');
+      h.className = 'cell head'; h.textContent = colLabel(c);
+      board.appendChild(h);
+    }
+    const canFire = remoteTurn === 'me';
+    let shotsFired = 0;
+    for (let r = 0; r < SIZE; r++) {
+      const rh = document.createElement('div');
+      rh.className = 'cell head'; rh.textContent = rowLabel(r);
+      board.appendChild(rh);
+      for (let c = 0; c < SIZE; c++) {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'cell tile';
+        const known = me.shotsAt[r][c];
+        if (known) {
+          cell.classList.add(known, 'locked');
+          cell.disabled = true;
+          shotsFired++;
+        } else if (canFire) {
+          cell.onclick = () => fireRemoteAt(r, c);
+        } else {
+          cell.classList.add('locked');
+          cell.disabled = true;
+        }
+        cell.setAttribute('aria-label', `${rowLabel(r)}${colLabel(c)}`);
+        board.appendChild(cell);
+      }
+    }
+    $('playName').textContent = canFire ? 'vous' : "l'adversaire";
+    $('shotsCount').textContent = canFire ? `${shotsFired} tirs joués` : "En attente du tir adverse…";
+  }
+
+  function renderRemoteFleetStatus() {
+    const me = players[0];
+    const el = $('ownFleetStatus');
+    el.innerHTML = '';
+    me.placedShips.forEach(s => {
+      const sunk = s.cells.every(([r, c]) => me.received[r][c] === 'hit');
+      const chip = document.createElement('span');
+      chip.className = 'mini-ship' + (sunk ? ' dead' : '');
+      chip.textContent = s.name;
+      el.appendChild(chip);
+    });
+  }
+
+  function fireRemoteAt(row, col) {
+    if (remoteTurn !== 'me') return;
+    sendMsg({ type: 'fire', row, col });
+    remoteTurn = 'waiting';
+    renderRemoteFireBoard();
+  }
+
+  function handleIncomingFire(row, col) {
+    const me = players[0];
+    const shipId = me.ships[row][col];
+    let hit = false, sunk = false, shipName = null, allSunk = false, sunkCells = null;
+    if (shipId) {
+      me.received[row][col] = 'hit';
+      hit = true;
+      const ship = me.placedShips.find(s => s.id === shipId);
+      sunk = ship.cells.every(([r, c]) => me.received[r][c] === 'hit');
+      if (sunk) { shipName = ship.name; sunkCells = ship.cells; }
+      allSunk = me.placedShips.every(s => s.cells.every(([r, c]) => me.received[r][c] === 'hit'));
+    } else {
+      me.received[row][col] = 'miss';
+    }
+    sendMsg({ type: 'result', row, col, hit, sunk, shipName, allSunk, sunkCells });
+    renderRemoteFleetStatus();
+
+    if (allSunk) {
+      showRemoteModal({
+        icon: '💥',
+        title: 'Flotte coulée…',
+        text: 'Toute votre flotte a été détruite.',
+        onClose: () => showRemoteEnd(false),
+      });
+      return;
+    }
+    const icon = hit ? (sunk ? '☠️' : '💥') : '💦';
+    const title = hit ? (sunk ? `Un de vos navires a coulé : ${shipName}` : 'Vous avez été touché !') : "L'adversaire a tiré dans l'eau";
+    const text = hit ? "L'adversaire a marqué un point." : 'Aucun de vos navires touché.';
+    showRemoteModal({ icon, title, text, onClose: () => { remoteTurn = 'me'; renderRemoteFireBoard(); } });
+  }
+
+  function handleIncomingResult(msg) {
+    const me = players[0];
+    if (msg.sunk && msg.sunkCells) {
+      msg.sunkCells.forEach(([r, c]) => { me.shotsAt[r][c] = 'sunk'; });
+    } else {
+      me.shotsAt[msg.row][msg.col] = msg.hit ? 'hit' : 'miss';
+    }
+    renderRemoteFireBoard();
+
+    if (msg.allSunk) {
+      showRemoteModal({
+        icon: '🏆',
+        title: 'Flotte adverse détruite !',
+        text: 'Vous avez gagné la partie.',
+        onClose: () => showRemoteEnd(true),
+      });
+      return;
+    }
+    let icon, title, text;
+    if (msg.sunk) { icon = '☠️'; title = `Coulé : ${msg.shipName} !`; text = 'Un navire adverse a été détruit.'; }
+    else if (msg.hit) { icon = '💥'; title = 'Touché !'; text = 'Le tir a atteint un navire adverse.'; }
+    else { icon = '💦'; title = "Dans l'eau"; text = 'Aucun navire à cet endroit.'; }
+    showRemoteModal({ icon, title, text, onClose: () => { remoteTurn = 'opponent'; renderRemoteFireBoard(); } });
+  }
+
+  function showRemoteModal(opts) {
+    $('resultIcon').textContent = opts.icon;
+    $('resultTitle').textContent = opts.title;
+    $('resultText').textContent = opts.text;
+    pendingRemoteModalAction = opts.onClose || null;
+    $('resultModal').hidden = false;
+  }
+
+  function showRemoteEnd(won) {
+    $('winTitle').textContent = won ? 'Vous remportez la bataille !' : 'Défaite…';
+    $('winSubtitle').textContent = won ? 'Toute la flotte adverse a été coulée.' : 'Toute votre flotte a été détruite.';
+    show('screen-win');
   }
 
   function copyRemoteLink() {
@@ -959,15 +1194,79 @@
     try { navigator.clipboard.writeText(text); } catch (e) {}
   }
 
+  async function requestMic() {
+    $('micStatus').textContent = "Demande d'accès au micro…";
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      $('micStatus').textContent = 'Micro indisponible dans ce contexte (HTTPS requis) — vous pouvez continuer sans audio.';
+      return;
+    }
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localMicReady = true;
+      $('micToggleBtn').hidden = false;
+      $('micStatus').textContent = "Micro activé — en attente de l'audio adverse…";
+      sendMsg({ type: 'mic-ready' });
+      maybeStartCall();
+    } catch (e) {
+      $('micStatus').textContent = 'Micro refusé ou indisponible — vous pouvez continuer sans audio.';
+    }
+  }
+
+  function maybeStartCall() {
+    if (!localMicReady || !remoteMicReady || !remotePeerId || mediaCall) return;
+    if (isHost) {
+      mediaCall = peer.call(remotePeerId, localStream);
+      attachCallHandlers(mediaCall);
+    }
+  }
+
+  function attachCallHandlers(call) {
+    call.on('stream', (remoteStream) => {
+      const audioEl = $('remoteAudio');
+      audioEl.srcObject = remoteStream;
+      audioEl.play().catch(() => {});
+      $('micStatus').textContent = micMuted ? 'Micro coupé — audio connecté' : 'Audio connecté';
+      $('micToggleBtn').hidden = false;
+    });
+    call.on('close', () => { $('micStatus').textContent = 'Audio déconnecté.'; });
+    call.on('error', () => { $('micStatus').textContent = "Erreur audio."; });
+  }
+
+  function toggleMic() {
+    if (!localStream) return;
+    micMuted = !micMuted;
+    localStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+    $('micToggleBtn').textContent = micMuted ? '🔇' : '🔊';
+    $('micStatus').textContent = micMuted ? 'Micro coupé' : 'Audio connecté';
+  }
+
+  function stopLocalMedia() {
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    if (mediaCall) { try { mediaCall.close(); } catch (e) {} mediaCall = null; }
+    localMicReady = false;
+    remoteMicReady = false;
+    micMuted = false;
+    $('audioBar').hidden = true;
+    $('micToggleBtn').hidden = true;
+  }
+
   function backToHomeFromRemote() {
+    stopLocalMedia();
     if (peer) { try { peer.destroy(); } catch (e) {} }
-    peer = null; conn = null;
+    peer = null; conn = null; remotePeerId = null;
     history.replaceState(null, '', location.pathname);
     show('screen-home');
   }
 
   if (new URLSearchParams(location.search).get('room')) {
     startRemoteTest();
+  }
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
   }
 </script>
 </body>
