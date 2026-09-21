@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bataille Navale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root {
+    --radius: 14px;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Thème Bleu (Océan) — défaut */
+  :root, :root[data-theme="ocean"] {
+    --bg: #0F2A3D;
+    --panel: #14374C;
+    --panel-alt: #1B4A63;
+    --text: #EAF2F1;
+    --text-dim: #93B2C2;
+    --accent: #E8A23D;
+    --on-accent: #26180A;
+    --hit: #D9584F;
+    --miss: #4C7286;
+    --ship: #35566E;
+    --ship-border: #4A7392;
+    --grid-line: rgba(234,242,241,0.10);
+    --cell-border-w: 1px;
+  }
+  :root[data-theme="sombre"] {
+    --bg: #121212;
+    --panel: #1E1E1E;
+    --panel-alt: #292929;
+    --text: #F2F2F2;
+    --text-dim: #A6A6A6;
+    --accent: #E8A23D;
+    --on-accent: #201200;
+    --hit: #E2574C;
+    --miss: #5C6670;
+    --ship: #33383E;
+    --ship-border: #4A525A;
+    --grid-line: rgba(255,255,255,0.08);
+    --cell-border-w: 1px;
+  }
+  :root[data-theme="clair"] {
+    --bg: #F5F3EE;
+    --panel: #FFFFFF;
+    --panel-alt: #ECE7DC;
+    --text: #1E2B33;
+    --text-dim: #5C6B73;
+    --accent: #C1701A;
+    --on-accent: #FFFFFF;
+    --hit: #C94A3F;
+    --miss: #7C93A0;
+    --ship: #C3D1D8;
+    --ship-border: #8CA3AF;
+    --grid-line: rgba(30,43,51,0.12);
+    --cell-border-w: 1px;
+  }
+  :root[data-theme="contraste"] {
+    --bg: #000000;
+    --panel: #000000;
+    --panel-alt: #0B0B0B;
+    --text: #FFFFFF;
+    --text-dim: #FFFFFF;
+    --accent: #FFD400;
+    --on-accent: #000000;
+    --hit: #FF4433;
+    --miss: #29B6FF;
+    --ship: #000000;
+    --ship-border: #FFFFFF;
+    --grid-line: rgba(255,255,255,0.6);
+    --cell-border-w: 2px;
+  }
+
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  :root[data-theme="ocean"] body {
+    background: radial-gradient(circle at 20% -10%, #16405A 0%, var(--bg) 55%);
+  }
+  .app {
+    width: 100%;
+    max-width: min(99vw, 480px);
+    padding: 20px 3px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 100vh;
+  }
+  .brand { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .brand h1 { font-size: 1.5rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  .brand .wave { color: var(--accent); }
+  .pill {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: var(--panel-alt);
+    border: 1px solid var(--grid-line);
+    border-radius: 999px;
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--grid-line);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .card.board-wrap { padding: 3px; }
+  .screen { display: flex; flex-direction: column; gap: 16px; }
+  .screen[hidden] { display: none; }
+  p.lede { color: var(--text-dim); font-size: 0.92rem; line-height: 1.5; margin: 0; }
+
+  button {
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 10px;
+    border: none;
+    padding: 13px 18px;
+    cursor: pointer;
+    transition: transform 0.08s ease, filter 0.15s ease;
+    color: var(--text);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  button:active { transform: scale(0.97); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--accent); color: var(--on-accent); }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .btn-primary:disabled { opacity: 0.4; cursor: default; }
+  .btn-secondary { background: var(--panel-alt); color: var(--text); }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--grid-line); }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn-row button { flex: 1; min-width: 120px; }
+
+  .btn-hold { position: relative; overflow: hidden; }
+  .btn-hold .hold-fill {
+    position: absolute; inset: 0;
+    width: 0%;
+    background: rgba(255,255,255,0.22);
+    pointer-events: none;
+  }
+  .btn-hold.holding .hold-fill { width: 100%; transition: width 550ms linear; }
+  .btn-hold .hold-label { position: relative; z-index: 1; }
+
+  .option-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .option-btn {
+    flex: 1;
+    min-width: 96px;
+    padding: 10px 8px;
+    border-radius: 10px;
+    background: var(--panel-alt);
+    border: var(--cell-border-w) solid var(--grid-line);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.76rem;
+    font-weight: 600;
+    text-align: center;
+  }
+  .option-btn.selected { border-color: var(--accent); color: var(--text); }
+  .option-btn small { display: block; color: var(--text-dim); font-weight: 500; margin-top: 3px; font-size: 0.68rem; }
+
+  .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+  .board-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-dim); letter-spacing: 0.03em; }
+  .board {
+    display: grid;
+    gap: 3px;
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 1;
+    margin: 0 auto;
+  }
+  .cell {
+    background: rgba(128,128,128,0.08);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .cell.head {
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: clamp(0.55rem, 2.6vw, 0.72rem);
+    font-weight: 600;
+  }
+  .cell.tile {
+    background: rgba(128,128,128,0.14);
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    border: var(--cell-border-w) solid transparent;
+    width: 100%;
+    height: 100%;
+    font-size: clamp(0.6rem, 3vw, 0.95rem);
+  }
+  .cell.tile.ship { background: var(--ship); border-color: var(--ship-border); }
+  .cell.tile.ghost-ok { background: var(--accent); opacity: 0.55; border-color: var(--accent); }
+  .cell.tile.ghost-bad { background: var(--hit); opacity: 0.55; border-color: var(--hit); }
+  .cell.tile.hit { background: var(--hit); border-color: var(--hit); }
+  .cell.tile.hit::after { content: '✕'; font-weight: 700; color: #fff; }
+  .cell.tile.miss { background: rgba(128,128,128,0.22); border-color: var(--grid-line); }
+  .cell.tile.miss::after { content: ''; width: 28%; height: 28%; border-radius: 50%; background: var(--miss); }
+  .cell.tile.sunk { background: #7A2E2A; border-color: #7A2E2A; }
+  .cell.tile.sunk::after { content: '✕'; font-weight: 700; color: #fff; }
+  .cell.tile.locked { cursor: default; }
+
+  .fleet-tray { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .ship-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+    background: var(--panel-alt);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 10px 6px;
+    cursor: pointer;
+    font-size: 0.74rem;
+    line-height: 1.15;
+    color: var(--text);
+  }
+  .ship-chip[data-size="5"] { grid-column: span 2; }
+  .ship-chip.selected { border-color: var(--accent); }
+  .ship-chip.placed { opacity: 0.4; cursor: default; }
+  .ship-chip .dots { display: flex; gap: 3px; justify-content: center; }
+  .ship-chip .dots span { width: 9px; height: 9px; border-radius: 2px; background: var(--ship-border); }
+
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: var(--text-dim);
+  }
+  .status-bar .turn-name { color: var(--text); font-weight: 600; }
+
+  .pass-screen { text-align: center; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .pass-screen .big-icon { font-size: 3rem; }
+  .pass-screen h2 { margin: 0; font-size: 1.3rem; }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.72);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 10;
+  }
+  .modal-backdrop[hidden] { display: none; }
+  .modal {
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding: 26px 22px;
+    max-width: 340px; width: 100%;
+    text-align: center;
+    display: flex; flex-direction: column; gap: 14px;
+    border: 1px solid var(--grid-line);
+  }
+  .modal .result-icon { font-size: 2.6rem; }
+  .modal h3 { margin: 0; font-size: 1.2rem; }
+  .modal p { margin: 0; color: var(--text-dim); font-size: 0.9rem; }
+
+  .mini-fleet { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .mini-fleet .mini-ship {
+    font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem;
+    padding: 4px 8px; border-radius: 6px;
+    background: var(--panel-alt); color: var(--text-dim);
+  }
+  .mini-fleet .mini-ship.dead { background: var(--hit); color: #fff; text-decoration: line-through; }
+
+  @media (min-width: 640px) {
+    .app { max-width: min(99vw, 1100px); padding-top: 32px; }
+  }
+  @media (orientation: landscape) {
+    html, body { height: 100dvh; }
+    .app {
+      height: 100dvh;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .screen { flex: 1; min-height: 0; }
+    .card.board-wrap {
+      flex: 1;
+      min-height: 0;
+      justify-content: center;
+    }
+    .card.board-wrap .board-label { flex: none; }
+    .card.board-wrap .board {
+      flex: 1;
+      min-height: 0;
+      width: auto;
+      height: 100%;
+      max-width: 100%;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="brand">
+    <h1>Bataille <span class="wave">Navale</span></h1>
+    <span class="pill" id="phasePill">Réglages</span>
+  </div>
+
+  <!-- ÉCRAN ACCUEIL -->
+  <section class="screen" id="screen-home">
+    <div class="card">
+      <p class="lede">Deux joueurs, un seul téléphone. Placez votre flotte en secret, puis passez l'appareil à chaque tour.</p>
+    </div>
+    <div class="card">
+      <span class="board-label" style="display:block; margin-bottom:10px;">Taille de la grille</span>
+      <div class="option-row" id="sizeOptions"></div>
+    </div>
+    <div class="card">
+      <span class="board-label" style="display:block; margin-bottom:10px;">Thème</span>
+      <div class="option-row" id="themeOptions"></div>
+    </div>
+    <button class="btn-primary" style="width:100%;" onclick="startGame()">Nouvelle partie</button>
+    <button class="btn-ghost" style="width:100%;" onclick="startRemoteTest()">Tester la connexion à distance (bêta)</button>
+  </section>
+
+  <!-- ÉCRAN PLACEMENT -->
+  <section class="screen" id="screen-place" hidden>
+    <div class="status-bar">
+      <span>Placement — <span class="turn-name" id="placeName"></span></span>
+      <span id="placeCount"></span>
+    </div>
+    <div class="card board-wrap">
+      <span class="board-label">Votre grille</span>
+      <div class="board" id="placeBoard"></div>
+    </div>
+    <p class="lede" style="text-align:center;">Touchez une case pour prévisualiser, touchez-la à nouveau pour confirmer.</p>
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="toggleOrientation()">↻ Pivoter (<span id="orientLabel">horizontal</span>)</button>
+      <button class="btn-ghost btn-hold" id="randomBtn" type="button" oncontextmenu="return false;">
+        <span class="hold-fill" aria-hidden="true"></span>
+        <span class="hold-label">Maintenir pour placement aléatoire</span>
+      </button>
+    </div>
+    <div class="card fleet-tray" id="fleetTray"></div>
+    <button class="btn-primary" id="placeValidate" style="width:100%;" disabled onclick="validatePlacement()">Valider ma flotte</button>
+  </section>
+
+  <!-- ÉCRAN PASSAGE -->
+  <section class="screen" id="screen-pass" hidden>
+    <div class="card pass-screen">
+      <span class="big-icon" id="passIcon">📱</span>
+      <h2 id="passTitle">Passe le téléphone</h2>
+      <p class="lede" id="passText"></p>
+      <button class="btn-primary" onclick="confirmPass()">C'est bon, j'ai le téléphone</button>
+    </div>
+  </section>
+
+  <!-- ÉCRAN JEU -->
+  <section class="screen" id="screen-play" hidden>
+    <div class="status-bar">
+      <span>Au tour de <span class="turn-name" id="playName"></span></span>
+      <span id="shotsCount"></span>
+    </div>
+    <div class="card board-wrap">
+      <span class="board-label">Grille de tir — touchez une case</span>
+      <div class="board" id="fireBoard"></div>
+    </div>
+    <div class="card">
+      <span class="board-label" style="display:block; margin-bottom:10px;">Votre flotte</span>
+      <div class="mini-fleet" id="ownFleetStatus"></div>
+    </div>
+  </section>
+
+  <!-- ÉCRAN VICTOIRE -->
+  <section class="screen" id="screen-win" hidden>
+    <div class="card pass-screen">
+      <span class="big-icon">🏆</span>
+      <h2 id="winTitle"></h2>
+      <p class="lede">Toute la flotte adverse a été coulée.</p>
+      <button class="btn-primary" style="width:100%;" onclick="location.reload()">Rejouer</button>
+    </div>
+  </section>
+
+  <!-- ÉCRAN TEST RÉSEAU (bêta) -->
+  <section class="screen" id="screen-remote" hidden>
+    <div class="card">
+      <p class="lede" id="remoteStatus">Initialisation…</p>
+      <div id="remoteLinkBox" hidden style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+        <p class="lede" style="word-break:break-all; font-family:'IBM Plex Mono',monospace;" id="remoteLink"></p>
+        <button class="btn-secondary" style="width:100%;" onclick="copyRemoteLink()">Copier le lien</button>
+      </div>
+    </div>
+    <div class="card" id="remoteChatBox" hidden>
+      <div id="remoteLog" style="display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:var(--text-dim);"></div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <input id="remoteInput" type="text" placeholder="Message de test" style="flex:1; border-radius:10px; border:1px solid var(--grid-line); background:var(--panel-alt); color:var(--text); padding:10px 12px; font-family:inherit; font-size:0.9rem;">
+        <button class="btn-primary" onclick="sendRemoteTest()">Envoyer</button>
+      </div>
+    </div>
+    <button class="btn-ghost" style="width:100%;" onclick="backToHomeFromRemote()">Retour à l'accueil</button>
+  </section>
+
+</div>
+
+<div class="modal-backdrop" id="resultModal" hidden>
+  <div class="modal">
+    <span class="result-icon" id="resultIcon">💥</span>
+    <h3 id="resultTitle">Touché !</h3>
+    <p id="resultText"></p>
+    <button class="btn-primary" onclick="closeResultModal()">Continuer</button>
+  </div>
+</div>
+
+<script>
+  const GRID_SIZES = [
+    { size: 8,  label: 'Petite',   sub: '8×8 · 4 navires' },
+    { size: 10, label: 'Standard', sub: '10×10 · 5 navires' },
+    { size: 12, label: 'Grande',   sub: '12×12 · 7 navires' },
+  ];
+  const FLEETS = {
+    8: [
+      { id: 'cuirasse',    name: 'Cuirassé',     size: 4 },
+      { id: 'croiseur',    name: 'Croiseur',     size: 3 },
+      { id: 'sousmarin',   name: 'Sous-marin',   size: 3 },
+      { id: 'torpilleur',  name: 'Torpilleur',   size: 2 },
+    ],
+    10: [
+      { id: 'porteavions', name: 'Porte-avions', size: 5 },
+      { id: 'cuirasse',    name: 'Cuirassé',     size: 4 },
+      { id: 'croiseur',    name: 'Croiseur',     size: 3 },
+      { id: 'sousmarin',   name: 'Sous-marin',   size: 3 },
+      { id: 'torpilleur',  name: 'Torpilleur',   size: 2 },
+    ],
+    12: [
+      { id: 'porteavions', name: 'Porte-avions', size: 5 },
+      { id: 'cuirasse',    name: 'Cuirassé',     size: 4 },
+      { id: 'croiseur-a',  name: 'Croiseur A',   size: 4 },
+      { id: 'croiseur-b',  name: 'Croiseur B',   size: 3 },
+      { id: 'sousmarin',   name: 'Sous-marin',   size: 3 },
+      { id: 'torpilleur-a',name: 'Torpilleur A', size: 2 },
+      { id: 'torpilleur-b',name: 'Torpilleur B', size: 2 },
+    ],
+  };
+  const THEMES = [
+    { id: 'ocean',     label: 'Bleu' },
+    { id: 'sombre',    label: 'Sombre' },
+    { id: 'clair',     label: 'Clair' },
+    { id: 'contraste', label: 'Contraste élevé' },
+  ];
+
+  let selectedGridSize = 10;
+  let selectedTheme = 'ocean';
+  let SIZE = 10;
+  let currentFleet = FLEETS[10];
+
+  function colLabel(i) { return String(i + 1); }
+  function rowLabel(r) { return String.fromCharCode(65 + r); }
+
+  function emptyGrid(fill) {
+    return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => fill));
+  }
+  function makePlayer(name) {
+    return {
+      name,
+      ships: emptyGrid(null),
+      received: emptyGrid(null),
+      shotsAt: emptyGrid(null),
+      placedShips: [],
+    };
+  }
+
+  let players = [];
+  let placingIndex = 0;
+  let currentTurn = 0;
+  let orientation = 'h';
+  let selectedShipId = null;
+  let previewCell = null;
+  let pendingAction = null;
+  let lastShotResult = null;
+
+  const $ = (id) => document.getElementById(id);
+  function show(id) {
+    ['screen-home','screen-place','screen-pass','screen-play','screen-win','screen-remote'].forEach(s => { $(s).hidden = (s !== id); });
+  }
+
+  // ---- Réglages (accueil) ----
+  function renderSizeOptions() {
+    const row = $('sizeOptions');
+    row.innerHTML = '';
+    GRID_SIZES.forEach(g => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'option-btn' + (selectedGridSize === g.size ? ' selected' : '');
+      btn.innerHTML = `${g.label}<small>${g.sub}</small>`;
+      btn.onclick = () => { selectedGridSize = g.size; renderSizeOptions(); };
+      row.appendChild(btn);
+    });
+  }
+  function renderThemeOptions() {
+    const row = $('themeOptions');
+    row.innerHTML = '';
+    THEMES.forEach(t => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'option-btn' + (selectedTheme === t.id ? ' selected' : '');
+      btn.textContent = t.label;
+      btn.onclick = () => applyTheme(t.id);
+      row.appendChild(btn);
+    });
+  }
+  function applyTheme(id) {
+    selectedTheme = id;
+    document.documentElement.setAttribute('data-theme', id);
+    try { localStorage.setItem('bn-theme', id); } catch (e) {}
+    renderThemeOptions();
+  }
+  (function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem('bn-theme'); } catch (e) {}
+    if (saved && THEMES.some(t => t.id === saved)) selectedTheme = saved;
+    document.documentElement.setAttribute('data-theme', selectedTheme);
+  })();
+  renderSizeOptions();
+  renderThemeOptions();
+
+  // ---- Appui long générique (protège contre les activations accidentelles) ----
+  function bindLongPress(el, onComplete, duration) {
+    let timer = null;
+    const start = (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      el.classList.add('holding');
+      timer = setTimeout(() => {
+        el.classList.remove('holding');
+        onComplete();
+      }, duration);
+    };
+    const cancel = () => {
+      clearTimeout(timer);
+      el.classList.remove('holding');
+    };
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerup', cancel);
+    el.addEventListener('pointerleave', cancel);
+    el.addEventListener('pointercancel', cancel);
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+  bindLongPress($('randomBtn'), randomizePlacement, 550);
+
+  // ---- Démarrage partie ----
+  function startGame() {
+    SIZE = selectedGridSize;
+    currentFleet = FLEETS[SIZE];
+    players = [makePlayer('Joueur 1'), makePlayer('Joueur 2')];
+    placingIndex = 0;
+    beginPlacement(0);
+  }
+
+  function beginPlacement(idx) {
+    placingIndex = idx;
+    selectedShipId = currentFleet[0].id;
+    orientation = 'h';
+    previewCell = null;
+    $('placeName').textContent = players[idx].name;
+    $('phasePill').textContent = 'Mise en place';
+    renderFleetTray();
+    renderPlaceBoard();
+    updatePlaceValidateState();
+    show('screen-place');
+  }
+
+  function renderFleetTray() {
+    const tray = $('fleetTray');
+    const p = players[placingIndex];
+    tray.innerHTML = '';
+    currentFleet.forEach(st => {
+      const placed = p.placedShips.some(s => s.id === st.id);
+      const chip = document.createElement('div');
+      chip.className = 'ship-chip' + (placed ? ' placed' : '') + (selectedShipId === st.id && !placed ? ' selected' : '');
+      chip.dataset.size = st.size;
+      const dots = Array.from({ length: st.size }).map(() => '<span></span>').join('');
+      chip.innerHTML = `<span>${st.name}</span><span class="dots">${dots}</span>`;
+      if (!placed) chip.onclick = () => { selectedShipId = st.id; previewCell = null; renderFleetTray(); renderPlaceBoard(); };
+      tray.appendChild(chip);
+    });
+    $('placeCount').textContent = `${p.placedShips.length}/${currentFleet.length} navires`;
+  }
+
+  function toggleOrientation() {
+    orientation = orientation === 'h' ? 'v' : 'h';
+    $('orientLabel').textContent = orientation === 'h' ? 'horizontal' : 'vertical';
+    renderPlaceBoard();
+  }
+
+  function shipCellsRaw(row, col, size, orient) {
+    const cells = [];
+    for (let i = 0; i < size; i++) {
+      const r = orient === 'v' ? row + i : row;
+      const c = orient === 'h' ? col + i : col;
+      cells.push([r, c]);
+    }
+    return cells;
+  }
+  function cellsInBounds(cells) {
+    return cells.every(([r, c]) => r >= 0 && r < SIZE && c >= 0 && c < SIZE);
+  }
+  function shipCells(row, col, size, orient) {
+    const cells = shipCellsRaw(row, col, size, orient);
+    return cellsInBounds(cells) ? cells : null;
+  }
+  function canPlace(p, cells) {
+    if (!cells) return false;
+    return cells.every(([r, c]) => p.ships[r][c] === null);
+  }
+
+  function buildBoardGrid(el) {
+    el.style.gridTemplateColumns = `minmax(16px, 0.7fr) repeat(${SIZE}, 1fr)`;
+    el.style.gridTemplateRows = `minmax(16px, 0.7fr) repeat(${SIZE}, 1fr)`;
+  }
+
+  function renderPlaceBoard() {
+    const p = players[placingIndex];
+    const board = $('placeBoard');
+    board.innerHTML = '';
+    buildBoardGrid(board);
+
+    let previewCells = null;
+    let previewValid = false;
+    if (previewCell && selectedShipId) {
+      const st = currentFleet.find(s => s.id === selectedShipId);
+      if (st && !p.placedShips.some(s => s.id === st.id)) {
+        previewCells = shipCellsRaw(previewCell.row, previewCell.col, st.size, orientation);
+        previewValid = cellsInBounds(previewCells) && previewCells.every(([r, c]) => p.ships[r][c] === null);
+      }
+    }
+
+    board.appendChild(document.createElement('div')).className = 'cell head';
+    for (let c = 0; c < SIZE; c++) {
+      const h = document.createElement('div');
+      h.className = 'cell head'; h.textContent = colLabel(c);
+      board.appendChild(h);
+    }
+    for (let r = 0; r < SIZE; r++) {
+      const rh = document.createElement('div');
+      rh.className = 'cell head'; rh.textContent = rowLabel(r);
+      board.appendChild(rh);
+      for (let c = 0; c < SIZE; c++) {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        let cls = 'cell tile';
+        if (p.ships[r][c]) cls += ' ship';
+        if (previewCells && previewCells.some(([pr, pc]) => pr === r && pc === c)) {
+          cls += previewValid ? ' ghost-ok' : ' ghost-bad';
+        }
+        cell.className = cls;
+        cell.setAttribute('aria-label', `${rowLabel(r)}${colLabel(c)}`);
+        cell.onclick = () => cellClicked(r, c);
+        board.appendChild(cell);
+      }
+    }
+  }
+
+  function cellClicked(row, col) {
+    const p = players[placingIndex];
+    if (!selectedShipId) return;
+    const st = currentFleet.find(s => s.id === selectedShipId);
+    if (p.placedShips.some(s => s.id === st.id)) return;
+
+    if (previewCell && previewCell.row === row && previewCell.col === col) {
+      const cells = shipCells(row, col, st.size, orientation);
+      if (!canPlace(p, cells)) return;
+      cells.forEach(([r, c]) => { p.ships[r][c] = st.id; });
+      p.placedShips.push({ id: st.id, name: st.name, cells });
+      previewCell = null;
+      const next = currentFleet.find(s => !p.placedShips.some(x => x.id === s.id));
+      selectedShipId = next ? next.id : null;
+      renderFleetTray();
+      renderPlaceBoard();
+      updatePlaceValidateState();
+      return;
+    }
+    previewCell = { row, col };
+    renderPlaceBoard();
+  }
+
+  function randomizePlacement() {
+    const p = players[placingIndex];
+    previewCell = null;
+    p.ships = emptyGrid(null);
+    p.placedShips = [];
+    currentFleet.forEach(st => {
+      let placed = false, attempts = 0;
+      while (!placed && attempts < 400) {
+        attempts++;
+        const o = Math.random() < 0.5 ? 'h' : 'v';
+        const row = Math.floor(Math.random() * SIZE);
+        const col = Math.floor(Math.random() * SIZE);
+        const cells = shipCells(row, col, st.size, o);
+        if (canPlace(p, cells)) {
+          cells.forEach(([r, c]) => { p.ships[r][c] = st.id; });
+          p.placedShips.push({ id: st.id, name: st.name, cells });
+          placed = true;
+        }
+      }
+    });
+    selectedShipId = null;
+    renderFleetTray();
+    renderPlaceBoard();
+    updatePlaceValidateState();
+  }
+
+  function updatePlaceValidateState() {
+    const p = players[placingIndex];
+    $('placeValidate').disabled = p.placedShips.length !== currentFleet.length;
+  }
+
+  function validatePlacement() {
+    if (placingIndex === 0) {
+      goToPass({
+        icon: '📱',
+        title: `Passe le téléphone à ${players[1].name}`,
+        text: `${players[0].name}, éloigne-toi de l'écran. ${players[1].name} va placer sa flotte en secret.`,
+        onConfirm: () => beginPlacement(1),
+      });
+    } else {
+      goToPass({
+        icon: '⚓',
+        title: 'Les deux flottes sont prêtes',
+        text: `Passe le téléphone à ${players[0].name} pour commencer la partie.`,
+        onConfirm: () => beginTurn(0),
+      });
+    }
+  }
+
+  function goToPass(cfg) {
+    $('passIcon').textContent = cfg.icon;
+    $('passTitle').textContent = cfg.title;
+    $('passText').textContent = cfg.text;
+    pendingAction = cfg.onConfirm;
+    show('screen-pass');
+  }
+  function confirmPass() {
+    const action = pendingAction;
+    pendingAction = null;
+    if (action) action();
+  }
+
+  function beginTurn(idx) {
+    currentTurn = idx;
+    $('phasePill').textContent = 'Combat';
+    $('playName').textContent = players[idx].name;
+    renderFireBoard();
+    renderOwnFleetStatus();
+    show('screen-play');
+  }
+  function opponentOf(idx) { return players[idx === 0 ? 1 : 0]; }
+
+  function renderFireBoard() {
+    const p = players[currentTurn];
+    const board = $('fireBoard');
+    board.innerHTML = '';
+    buildBoardGrid(board);
+    board.appendChild(document.createElement('div')).className = 'cell head';
+    for (let c = 0; c < SIZE; c++) {
+      const h = document.createElement('div');
+      h.className = 'cell head'; h.textContent = colLabel(c);
+      board.appendChild(h);
+    }
+    let shotsFired = 0;
+    for (let r = 0; r < SIZE; r++) {
+      const rh = document.createElement('div');
+      rh.className = 'cell head'; rh.textContent = rowLabel(r);
+      board.appendChild(rh);
+      for (let c = 0; c < SIZE; c++) {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'cell tile';
+        const known = p.shotsAt[r][c];
+        if (known) {
+          cell.classList.add(known);
+          cell.classList.add('locked');
+          cell.disabled = true;
+          shotsFired++;
+        } else {
+          cell.onclick = () => fireAt(r, c);
+        }
+        cell.setAttribute('aria-label', `${rowLabel(r)}${colLabel(c)}${known ? ' — ' + known : ''}`);
+        board.appendChild(cell);
+      }
+    }
+    $('shotsCount').textContent = `${shotsFired} tirs joués`;
+  }
+
+  function renderOwnFleetStatus() {
+    const p = players[currentTurn];
+    const el = $('ownFleetStatus');
+    el.innerHTML = '';
+    p.placedShips.forEach(s => {
+      const sunk = s.cells.every(([r, c]) => p.received[r][c] === 'hit');
+      const chip = document.createElement('span');
+      chip.className = 'mini-ship' + (sunk ? ' dead' : '');
+      chip.textContent = s.name;
+      el.appendChild(chip);
+    });
+  }
+
+  function fireAt(row, col) {
+    const attacker = players[currentTurn];
+    const defender = opponentOf(currentTurn);
+    const shipId = defender.ships[row][col];
+
+    if (shipId) {
+      defender.received[row][col] = 'hit';
+      const ship = defender.placedShips.find(s => s.id === shipId);
+      const sunk = ship.cells.every(([r, c]) => defender.received[r][c] === 'hit');
+      attacker.shotsAt[row][col] = sunk ? 'sunk' : 'hit';
+      if (sunk) ship.cells.forEach(([r, c]) => { attacker.shotsAt[r][c] = 'sunk'; });
+      const allSunk = defender.placedShips.every(s => s.cells.every(([r, c]) => defender.received[r][c] === 'hit'));
+      lastShotResult = { hit: true, sunk, shipName: ship.name, allSunk };
+    } else {
+      defender.received[row][col] = 'miss';
+      attacker.shotsAt[row][col] = 'miss';
+      lastShotResult = { hit: false, sunk: false, shipName: null, allSunk: false };
+    }
+    renderFireBoard();
+    renderOwnFleetStatus();
+    showResultModal();
+  }
+
+  function showResultModal() {
+    const r = lastShotResult;
+    const icon = $('resultIcon'), title = $('resultTitle'), text = $('resultText');
+    if (r.allSunk) {
+      icon.textContent = '🏆'; title.textContent = 'Coulé — flotte détruite !';
+      text.textContent = `${players[currentTurn].name} a gagné la partie.`;
+    } else if (r.sunk) {
+      icon.textContent = '☠️'; title.textContent = `Coulé : ${r.shipName} !`;
+      text.textContent = 'Un navire adverse a été entièrement détruit.';
+    } else if (r.hit) {
+      icon.textContent = '💥'; title.textContent = 'Touché !';
+      text.textContent = 'Le tir a atteint un navire adverse.';
+    } else {
+      icon.textContent = '💦'; title.textContent = "Dans l'eau";
+      text.textContent = 'Aucun navire à cet endroit.';
+    }
+    $('resultModal').hidden = false;
+  }
+
+  function closeResultModal() {
+    $('resultModal').hidden = true;
+    const r = lastShotResult;
+    if (r.allSunk) {
+      $('winTitle').textContent = `${players[currentTurn].name} remporte la bataille !`;
+      show('screen-win');
+      return;
+    }
+    const nextIdx = currentTurn === 0 ? 1 : 0;
+    goToPass({
+      icon: '📱',
+      title: 'Passe le téléphone',
+      text: `Au tour de ${players[nextIdx].name}.`,
+      onConfirm: () => beginTurn(nextIdx),
+    });
+  }
+
+  // ---- Test de connexion à distance (bêta) — nécessite un hébergement réel, ----
+  // ---- ne fonctionne pas dans l'aperçu artefact (réseau externe bloqué). ----
+  let peer = null;
+  let conn = null;
+
+  function startRemoteTest() {
+    show('screen-remote');
+    $('remoteLinkBox').hidden = true;
+    $('remoteChatBox').hidden = true;
+    $('remoteLog').innerHTML = '';
+    $('remoteStatus').textContent = 'Connexion au serveur de mise en relation…';
+
+    if (typeof Peer === 'undefined') {
+      $('remoteStatus').textContent = "La bibliothèque réseau n'a pas pu être chargée (bloquée dans cet aperçu). Héberge ce fichier (GitHub Pages, par exemple) puis réessaie depuis cette adresse.";
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    const roomId = params.get('room');
+
+    const openTimeout = setTimeout(() => {
+      $('remoteStatus').textContent = "Impossible de joindre le serveur de connexion depuis cet aperçu. Héberge ce fichier (GitHub Pages, par exemple) puis réessaie depuis cette adresse hébergée.";
+    }, 6000);
+
+    peer = new Peer();
+
+    peer.on('open', (id) => {
+      clearTimeout(openTimeout);
+      if (roomId) {
+        $('remoteStatus').textContent = `Connexion à la partie ${roomId}…`;
+        conn = peer.connect(roomId);
+        setupRemoteConnection();
+      } else {
+        const link = `${location.origin}${location.pathname}?room=${id}`;
+        $('remoteStatus').textContent = "Partage ce lien avec l'autre joueur, puis attends sa connexion :";
+        $('remoteLink').textContent = link;
+        $('remoteLinkBox').hidden = false;
+        peer.on('connection', (c) => { conn = c; setupRemoteConnection(); });
+      }
+    });
+
+    peer.on('error', (err) => {
+      clearTimeout(openTimeout);
+      $('remoteStatus').textContent = 'Erreur de connexion : ' + err.type;
+    });
+  }
+
+  function setupRemoteConnection() {
+    conn.on('open', () => {
+      $('remoteStatus').textContent = 'Connecté ! Échange de messages de test :';
+      $('remoteChatBox').hidden = false;
+      logRemote('— connexion établie —');
+    });
+    conn.on('data', (data) => logRemote('Reçu : ' + data));
+    conn.on('close', () => { $('remoteStatus').textContent = 'Connexion perdue.'; });
+  }
+
+  function sendRemoteTest() {
+    const input = $('remoteInput');
+    const text = input.value.trim();
+    if (!text || !conn || !conn.open) return;
+    conn.send(text);
+    logRemote('Envoyé : ' + text);
+    input.value = '';
+  }
+
+  function logRemote(line) {
+    const log = $('remoteLog');
+    const p = document.createElement('div');
+    p.textContent = line;
+    log.appendChild(p);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function copyRemoteLink() {
+    const text = $('remoteLink').textContent;
+    try { navigator.clipboard.writeText(text); } catch (e) {}
+  }
+
+  function backToHomeFromRemote() {
+    if (peer) { try { peer.destroy(); } catch (e) {} }
+    peer = null; conn = null;
+    history.replaceState(null, '', location.pathname);
+    show('screen-home');
+  }
+
+  if (new URLSearchParams(location.search).get('room')) {
+    startRemoteTest();
+  }
+</script>
+</body>
+</html>
