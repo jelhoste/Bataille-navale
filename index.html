@@ -34,6 +34,7 @@
     --on-accent: #26180A;
     --hit: #D9584F;
     --miss: #4C7286;
+    --own: #5FCB86;
     --ship: #35566E;
     --ship-border: #4A7392;
     --grid-line: rgba(234,242,241,0.10);
@@ -49,6 +50,7 @@
     --on-accent: #201200;
     --hit: #E2574C;
     --miss: #5C6670;
+    --own: #63D188;
     --ship: #33383E;
     --ship-border: #4A525A;
     --grid-line: rgba(255,255,255,0.08);
@@ -64,6 +66,7 @@
     --on-accent: #FFFFFF;
     --hit: #C94A3F;
     --miss: #7C93A0;
+    --own: #2E8B57;
     --ship: #C3D1D8;
     --ship-border: #8CA3AF;
     --grid-line: rgba(30,43,51,0.12);
@@ -79,6 +82,7 @@
     --on-accent: #000000;
     --hit: #FF4433;
     --miss: #29B6FF;
+    --own: #22E07A;
     --ship: #000000;
     --ship-border: #FFFFFF;
     --grid-line: rgba(255,255,255,0.6);
@@ -131,6 +135,10 @@
     padding: 18px;
   }
   .card.board-wrap { padding: 3px; }
+  #fleetCard.compact { padding: 8px 12px; }
+  #fleetCard.compact #fleetLabel { margin-bottom: 6px !important; font-size: 0.68rem; }
+  #fleetCard.compact .mini-fleet { gap: 4px; }
+  #fleetCard.compact .mini-fleet .mini-ship { font-size: 0.62rem; padding: 3px 7px; }
   .screen { display: flex; flex-direction: column; gap: 16px; }
   .screen[hidden] { display: none; }
   p.lede { color: var(--text-dim); font-size: 0.92rem; line-height: 1.5; margin: 0; }
@@ -235,6 +243,29 @@
   .cell.tile.sunk { background: #7A2E2A; border-color: #7A2E2A; }
   .cell.tile.sunk::after { content: '✕'; font-weight: 700; color: #fff; }
   .cell.tile.locked { cursor: default; }
+  .cell.tile .own-mark {
+    position: absolute;
+    right: 8%;
+    bottom: 8%;
+    width: 12.5%;
+    height: 12.5%;
+    pointer-events: none;
+  }
+  .cell.tile .own-mark.dot {
+    border-radius: 50%;
+    background: var(--own);
+    opacity: 0.85;
+  }
+  .cell.tile .own-mark.cross {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    line-height: 1;
+    color: var(--own);
+    font-weight: 700;
+    opacity: 0.95;
+  }
 
   .fleet-tray { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .ship-chip {
@@ -297,6 +328,68 @@
   }
   .mini-fleet .mini-ship.dead { background: var(--hit); color: #fff; text-decoration: line-through; }
 
+  .call-bar { padding: 12px 14px; }
+
+  .own-board {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    max-width: 230px;
+    margin: 0 auto 14px;
+    aspect-ratio: 1;
+  }
+  .own-board .mcell {
+    position: relative;
+    background: rgba(128,128,128,0.10);
+    border-radius: 3px;
+    min-width: 0;
+    min-height: 0;
+  }
+  .own-board .mcell .dot {
+    position: absolute;
+    right: 14%;
+    bottom: 14%;
+    width: 24%;
+    height: 24%;
+    border-radius: 50%;
+    background: var(--hit);
+    opacity: 0.85;
+  }
+  .own-board .mcell .cross {
+    position: absolute;
+    right: 6%;
+    bottom: 0;
+    font-size: 9px;
+    line-height: 1;
+    color: var(--hit);
+    font-weight: 700;
+  }
+    position: relative;
+    margin-top: 10px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 16 / 10;
+  }
+  .video-area video#remoteVideo {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    background: #000;
+  }
+  .video-area video#localVideo {
+    position: absolute;
+    bottom: 8px; right: 8px;
+    width: 28%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid var(--panel);
+    transform: scaleX(-1);
+    background: #000;
+    transition: opacity 0.15s ease;
+  }
+
   @media (min-width: 640px) {
     .app { max-width: min(99vw, 1100px); padding-top: 32px; }
   }
@@ -332,11 +425,19 @@
     <span class="pill" id="phasePill">Réglages</span>
   </div>
 
-  <div class="card" id="audioBar" hidden style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px;">
-    <span class="board-label" id="micStatus">Micro…</span>
-    <button class="btn-ghost" id="micToggleBtn" hidden onclick="toggleMic()" style="min-width:auto; padding:8px 14px;">🔊</button>
+  <div class="card call-bar" id="audioBar" hidden>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <span class="board-label" id="micStatus">Micro…</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-ghost" id="micToggleBtn" hidden onclick="toggleMic()" style="min-width:auto; padding:8px 14px;">🔊</button>
+        <button class="btn-ghost" id="camToggleBtn" hidden onclick="toggleCamera()" style="min-width:auto; padding:8px 14px;">🎥</button>
+      </div>
+    </div>
+    <div class="video-area" id="videoArea" hidden>
+      <video id="remoteVideo" autoplay playsinline></video>
+      <video id="localVideo" autoplay playsinline muted></video>
+    </div>
   </div>
-  <audio id="remoteAudio" autoplay playsinline hidden></audio>
 
   <!-- ÉCRAN ACCUEIL -->
   <section class="screen" id="screen-home">
@@ -350,6 +451,10 @@
     <div class="card">
       <span class="board-label" style="display:block; margin-bottom:10px;">Thème</span>
       <div class="option-row" id="themeOptions"></div>
+    </div>
+    <div class="card">
+      <span class="board-label" style="display:block; margin-bottom:10px;">Affichage de vos navires en combat</span>
+      <div class="option-row" id="ownBoardOptions"></div>
     </div>
     <button class="btn-primary" style="width:100%;" onclick="startGame()">Nouvelle partie</button>
     <button class="btn-ghost" style="width:100%;" onclick="startRemoteTest()">Jouer à distance (bêta)</button>
@@ -397,8 +502,9 @@
       <span class="board-label">Grille de tir — touchez une case</span>
       <div class="board" id="fireBoard"></div>
     </div>
-    <div class="card">
-      <span class="board-label" style="display:block; margin-bottom:10px;">Votre flotte</span>
+    <div class="card" id="fleetCard">
+      <span class="board-label" id="fleetLabel" style="display:block; margin-bottom:10px;">Votre flotte</span>
+      <div class="own-board" id="ownBoardMini"></div>
       <div class="mini-fleet" id="ownFleetStatus"></div>
     </div>
   </section>
@@ -472,14 +578,28 @@
     { id: 'clair',     label: 'Clair' },
     { id: 'contraste', label: 'Contraste élevé' },
   ];
+  const OWN_BOARD_MODES = [
+    { id: 'separate', label: 'Grille séparée', sub: 'sous la grille de tir' },
+    { id: 'overlay',  label: 'Superposé',      sub: 'petit repère sur la grille de tir' },
+  ];
 
   let selectedGridSize = 10;
   let selectedTheme = 'ocean';
+  let ownBoardMode = 'separate';
   let SIZE = 10;
   let currentFleet = FLEETS[10];
 
   function colLabel(i) { return String(i + 1); }
   function rowLabel(r) { return String.fromCharCode(65 + r); }
+
+  function applyOwnMark(cellEl, me, r, c) {
+    if (ownBoardMode !== 'overlay' || !me || !me.ships[r][c]) return;
+    const hit = me.received[r][c] === 'hit';
+    const mark = document.createElement('span');
+    mark.className = 'own-mark ' + (hit ? 'cross' : 'dot');
+    if (hit) mark.textContent = '✕';
+    cellEl.appendChild(mark);
+  }
 
   function emptyGrid(fill) {
     return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => fill));
@@ -545,14 +665,34 @@
     try { localStorage.setItem('bn-theme', id); } catch (e) {}
     renderThemeOptions();
   }
+  function renderOwnBoardOptions() {
+    const row = $('ownBoardOptions');
+    row.innerHTML = '';
+    OWN_BOARD_MODES.forEach(m => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'option-btn' + (ownBoardMode === m.id ? ' selected' : '');
+      btn.innerHTML = `${m.label}<small>${m.sub}</small>`;
+      btn.onclick = () => {
+        ownBoardMode = m.id;
+        try { localStorage.setItem('bn-ownboard', m.id); } catch (e) {}
+        renderOwnBoardOptions();
+      };
+      row.appendChild(btn);
+    });
+  }
   (function initTheme() {
     let saved = null;
     try { saved = localStorage.getItem('bn-theme'); } catch (e) {}
     if (saved && THEMES.some(t => t.id === saved)) selectedTheme = saved;
     document.documentElement.setAttribute('data-theme', selectedTheme);
+    let savedMode = null;
+    try { savedMode = localStorage.getItem('bn-ownboard'); } catch (e) {}
+    if (savedMode && OWN_BOARD_MODES.some(m => m.id === savedMode)) ownBoardMode = savedMode;
   })();
   renderSizeOptions();
   renderThemeOptions();
+  renderOwnBoardOptions();
 
   // ---- Appui long générique (protège contre les activations accidentelles) ----
   function bindLongPress(el, onComplete, duration) {
@@ -835,6 +975,7 @@
           cell.onclick = () => fireAt(r, c);
         }
         cell.setAttribute('aria-label', `${rowLabel(r)}${colLabel(c)}${known ? ' — ' + known : ''}`);
+        applyOwnMark(cell, p, r, c);
         board.appendChild(cell);
       }
     }
@@ -843,6 +984,7 @@
 
   function renderOwnFleetStatus() {
     const p = players[currentTurn];
+    renderOwnBoardMini(p);
     const el = $('ownFleetStatus');
     el.innerHTML = '';
     p.placedShips.forEach(s => {
@@ -852,6 +994,35 @@
       chip.textContent = s.name;
       el.appendChild(chip);
     });
+  }
+
+  function renderOwnBoardMini(p) {
+    const el = $('ownBoardMini');
+    if (ownBoardMode === 'overlay') {
+      el.hidden = true;
+      el.innerHTML = '';
+      $('fleetCard').classList.add('compact');
+      return;
+    }
+    $('fleetCard').classList.remove('compact');
+    el.hidden = false;
+    el.innerHTML = '';
+    el.style.gridTemplateColumns = `repeat(${SIZE}, 1fr)`;
+    el.style.gridTemplateRows = `repeat(${SIZE}, 1fr)`;
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'mcell';
+        if (p.ships[r][c]) {
+          const hit = p.received[r][c] === 'hit';
+          const mark = document.createElement('span');
+          mark.className = hit ? 'cross' : 'dot';
+          if (hit) mark.textContent = '✕';
+          cell.appendChild(mark);
+        }
+        el.appendChild(cell);
+      }
+    }
   }
 
   function fireAt(row, col) {
@@ -929,6 +1100,8 @@
   let localMicReady = false;
   let remoteMicReady = false;
   let micMuted = false;
+  let camOff = false;
+  let remoteStreamHasVideo = false;
 
   function startRemoteTest() {
     show('screen-remote');
@@ -1040,7 +1213,7 @@
     opponentReady = false;
     remoteTurn = null;
     $('audioBar').hidden = false;
-    requestMic();
+    requestMedia();
     beginPlacement(0);
   }
 
@@ -1091,6 +1264,7 @@
           cell.disabled = true;
         }
         cell.setAttribute('aria-label', `${rowLabel(r)}${colLabel(c)}`);
+        applyOwnMark(cell, me, r, c);
         board.appendChild(cell);
       }
     }
@@ -1100,6 +1274,7 @@
 
   function renderRemoteFleetStatus() {
     const me = players[0];
+    renderOwnBoardMini(me);
     const el = $('ownFleetStatus');
     el.innerHTML = '';
     me.placedShips.forEach(s => {
@@ -1194,22 +1369,40 @@
     try { navigator.clipboard.writeText(text); } catch (e) {}
   }
 
-  async function requestMic() {
-    $('micStatus').textContent = "Demande d'accès au micro…";
+  async function requestMedia() {
+    $('micStatus').textContent = "Demande d'accès au micro et à la caméra…";
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      $('micStatus').textContent = 'Micro indisponible dans ce contexte (HTTPS requis) — vous pouvez continuer sans audio.';
+      $('micStatus').textContent = 'Micro/caméra indisponibles dans ce contexte (HTTPS requis) — vous pouvez continuer sans.';
       return;
     }
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localMicReady = true;
-      $('micToggleBtn').hidden = false;
-      $('micStatus').textContent = "Micro activé — en attente de l'audio adverse…";
-      sendMsg({ type: 'mic-ready' });
-      maybeStartCall();
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } });
     } catch (e) {
-      $('micStatus').textContent = 'Micro refusé ou indisponible — vous pouvez continuer sans audio.';
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        $('micStatus').textContent = "Caméra indisponible ou refusée — audio seul.";
+      } catch (e2) {
+        $('micStatus').textContent = 'Micro et caméra indisponibles — vous pouvez continuer sans.';
+        return;
+      }
     }
+    localMicReady = true;
+    $('micToggleBtn').hidden = false;
+    if (localStream.getVideoTracks().length > 0) {
+      $('camToggleBtn').hidden = false;
+      $('localVideo').srcObject = localStream;
+      $('localVideo').play().catch(() => {});
+    }
+    updateVideoAreaVisibility();
+    $('micStatus').textContent = "Prêt — en attente de l'adversaire…";
+    sendMsg({ type: 'mic-ready' });
+    maybeStartCall();
+  }
+
+  function updateVideoAreaVisibility() {
+    const localHasVideo = !!(localStream && localStream.getVideoTracks().length > 0);
+    $('videoArea').hidden = !(localHasVideo || remoteStreamHasVideo);
+    $('localVideo').style.display = localHasVideo ? 'block' : 'none';
   }
 
   function maybeStartCall() {
@@ -1222,14 +1415,16 @@
 
   function attachCallHandlers(call) {
     call.on('stream', (remoteStream) => {
-      const audioEl = $('remoteAudio');
-      audioEl.srcObject = remoteStream;
-      audioEl.play().catch(() => {});
-      $('micStatus').textContent = micMuted ? 'Micro coupé — audio connecté' : 'Audio connecté';
+      const v = $('remoteVideo');
+      v.srcObject = remoteStream;
+      v.play().catch(() => {});
+      remoteStreamHasVideo = remoteStream.getVideoTracks().length > 0;
+      updateVideoAreaVisibility();
+      $('micStatus').textContent = micMuted ? 'Micro coupé — connecté' : 'Connecté';
       $('micToggleBtn').hidden = false;
     });
-    call.on('close', () => { $('micStatus').textContent = 'Audio déconnecté.'; });
-    call.on('error', () => { $('micStatus').textContent = "Erreur audio."; });
+    call.on('close', () => { $('micStatus').textContent = 'Audio/vidéo déconnectés.'; });
+    call.on('error', () => { $('micStatus').textContent = "Erreur audio/vidéo."; });
   }
 
   function toggleMic() {
@@ -1237,7 +1432,17 @@
     micMuted = !micMuted;
     localStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
     $('micToggleBtn').textContent = micMuted ? '🔇' : '🔊';
-    $('micStatus').textContent = micMuted ? 'Micro coupé' : 'Audio connecté';
+    $('micStatus').textContent = micMuted ? 'Micro coupé' : 'Connecté';
+  }
+
+  function toggleCamera() {
+    if (!localStream) return;
+    const vTracks = localStream.getVideoTracks();
+    if (vTracks.length === 0) return;
+    camOff = !camOff;
+    vTracks.forEach(t => { t.enabled = !camOff; });
+    $('camToggleBtn').textContent = camOff ? '🚫' : '🎥';
+    $('localVideo').style.opacity = camOff ? '0.15' : '1';
   }
 
   function stopLocalMedia() {
@@ -1246,8 +1451,14 @@
     localMicReady = false;
     remoteMicReady = false;
     micMuted = false;
+    camOff = false;
+    remoteStreamHasVideo = false;
+    $('remoteVideo').srcObject = null;
+    $('localVideo').srcObject = null;
+    $('videoArea').hidden = true;
     $('audioBar').hidden = true;
     $('micToggleBtn').hidden = true;
+    $('camToggleBtn').hidden = true;
   }
 
   function backToHomeFromRemote() {
