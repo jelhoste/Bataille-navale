@@ -364,12 +364,14 @@
     color: var(--hit);
     font-weight: 700;
   }
+  .video-area {
     position: relative;
-    margin-top: 10px;
+    margin: 10px auto 0;
     border-radius: 10px;
     overflow: hidden;
     background: #000;
-    aspect-ratio: 16 / 10;
+    width: 100%;
+    height: clamp(160px, 38vh, 340px);
   }
   .video-area video#remoteVideo {
     width: 100%; height: 100%;
@@ -380,7 +382,8 @@
   .video-area video#localVideo {
     position: absolute;
     bottom: 8px; right: 8px;
-    width: 28%;
+    width: 26%;
+    max-width: 110px;
     aspect-ratio: 3 / 4;
     object-fit: cover;
     border-radius: 8px;
@@ -426,16 +429,19 @@
   </div>
 
   <div class="card call-bar" id="audioBar" hidden>
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-      <span class="board-label" id="micStatus">Micro…</span>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-ghost" id="micToggleBtn" hidden onclick="toggleMic()" style="min-width:auto; padding:8px 14px;">🔊</button>
-        <button class="btn-ghost" id="camToggleBtn" hidden onclick="toggleCamera()" style="min-width:auto; padding:8px 14px;">🎥</button>
+    <button class="btn-secondary" id="callToggleBtn" style="width:100%;" onclick="toggleCallPanel()">🎙️ Audio / vidéo ▾</button>
+    <div id="callPanel" hidden style="margin-top:10px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <span class="board-label" id="micStatus">Micro…</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-ghost" id="micToggleBtn" hidden onclick="toggleMic()" style="min-width:auto; padding:8px 14px;">🔇</button>
+          <button class="btn-ghost" id="camToggleBtn" hidden onclick="toggleCamera()" style="min-width:auto; padding:8px 14px;">🚫</button>
+        </div>
       </div>
-    </div>
-    <div class="video-area" id="videoArea" hidden>
-      <video id="remoteVideo" autoplay playsinline></video>
-      <video id="localVideo" autoplay playsinline muted></video>
+      <div class="video-area" id="videoArea" hidden>
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
+      </div>
     </div>
   </div>
 
@@ -585,7 +591,7 @@
 
   let selectedGridSize = 10;
   let selectedTheme = 'ocean';
-  let ownBoardMode = 'separate';
+  let ownBoardMode = 'overlay';
   let SIZE = 10;
   let currentFleet = FLEETS[10];
 
@@ -1387,14 +1393,21 @@
       }
     }
     localMicReady = true;
+    micMuted = true;
+    localStream.getAudioTracks().forEach(t => { t.enabled = false; });
     $('micToggleBtn').hidden = false;
+    $('micToggleBtn').textContent = '🔇';
     if (localStream.getVideoTracks().length > 0) {
+      camOff = true;
+      localStream.getVideoTracks().forEach(t => { t.enabled = false; });
       $('camToggleBtn').hidden = false;
+      $('camToggleBtn').textContent = '🚫';
       $('localVideo').srcObject = localStream;
+      $('localVideo').style.opacity = '0.15';
       $('localVideo').play().catch(() => {});
     }
     updateVideoAreaVisibility();
-    $('micStatus').textContent = "Prêt — en attente de l'adversaire…";
+    $('micStatus').textContent = "Micro et caméra coupés — dépliez pour activer";
     sendMsg({ type: 'mic-ready' });
     maybeStartCall();
   }
@@ -1427,6 +1440,13 @@
     call.on('error', () => { $('micStatus').textContent = "Erreur audio/vidéo."; });
   }
 
+  let callPanelOpen = false;
+  function toggleCallPanel() {
+    callPanelOpen = !callPanelOpen;
+    $('callPanel').hidden = !callPanelOpen;
+    $('callToggleBtn').textContent = callPanelOpen ? '🎙️ Audio / vidéo ▲' : '🎙️ Audio / vidéo ▾';
+  }
+
   function toggleMic() {
     if (!localStream) return;
     micMuted = !micMuted;
@@ -1453,9 +1473,12 @@
     micMuted = false;
     camOff = false;
     remoteStreamHasVideo = false;
+    callPanelOpen = false;
     $('remoteVideo').srcObject = null;
     $('localVideo').srcObject = null;
     $('videoArea').hidden = true;
+    $('callPanel').hidden = true;
+    $('callToggleBtn').textContent = '🎙️ Audio / vidéo ▾';
     $('audioBar').hidden = true;
     $('micToggleBtn').hidden = true;
     $('camToggleBtn').hidden = true;
